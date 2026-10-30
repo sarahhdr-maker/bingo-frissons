@@ -16,7 +16,8 @@ function cleanControl(c) {
     pausedAt: num(c.pausedAt),
     endedAt: num(c.endedAt),
     pausedTotal: num(c.pausedTotal) || 0,
-    shift: num(c.shift) || 0
+    shift: num(c.shift) || 0,
+    resetAt: num(c.resetAt) || 0
   };
 }
 
@@ -53,6 +54,8 @@ export async function handle(req, store, orgaCode) {
       const body = await req.json();
       if (!isOrga(body.code)) return json({ error: 'code' }, 401);
       const clean = cleanControl(body.control);
+      const prev = await store.get('control', { type: 'json' });
+      clean.resetAt = (prev && prev.resetAt) || 0;
       await store.setJSON('control', clean);
       return json({ control: clean });
     }
@@ -65,6 +68,15 @@ export async function handle(req, store, orgaCode) {
         if (p) out[b.key.slice('players/'.length)] = p;
       }));
       return json({ players: out });
+    }
+    if (path === '/reset' && req.method === 'POST') {
+      const body = await req.json();
+      if (!isOrga(body.code)) return json({ error: 'code' }, 401);
+      const { blobs } = await store.list({ prefix: 'players/' });
+      await Promise.all(blobs.map((b) => store.delete(b.key)));
+      const clean = cleanControl({ resetAt: Date.now() });
+      await store.setJSON('control', clean);
+      return json({ control: clean });
     }
     const m = path.match(/^\/player\/([a-z0-9-]{1,40})$/);
     if (m && req.method === 'GET') {
